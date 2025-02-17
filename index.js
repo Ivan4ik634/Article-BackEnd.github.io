@@ -1,0 +1,95 @@
+import express from 'express';
+import cors from 'cors';
+import mongoose from 'mongoose';
+import multer from 'multer';
+import fs from 'fs';
+import { login, register } from './controllers/User.js';
+import checkAuth from './utils/checkAuth.js';
+import {
+  PostsArticle,
+  PostsArticles,
+  PostsCreate,
+  PostsDelete,
+  PostsLike,
+  PostsUpdate,
+  PostsUser,
+  toggleLikeDislikePost,
+} from './controllers/Posts.js';
+import {
+  commentArticle,
+  commentArticleDelete,
+  commentArticleGetAll,
+  commentArticleGetOne,
+  commentArticlePatch,
+  toggleLikeDislikeComment,
+} from './controllers/Comment.js';
+import { acticleValidation, validatorComment, validatorRegister } from './validator.js';
+import {
+  PostsSubscribe,
+  SubscribeMe,
+  SubscribeToMe,
+  toggleSubscribe,
+} from './controllers/Subscribe.js';
+
+mongoose
+  .connect(
+    'mongodb+srv://admin:wwwwww@cluster0.xd1vv.mongodb.net/blog?retryWrites=true&w=majority&appName=Cluster0',
+  )
+  .then(() => {
+    console.log('DB OK');
+  })
+  .catch(() => console.log('error'));
+const app = express();
+const storage = multer.diskStorage({
+  destination: (_, __, cd) => {
+    if (!fs.existsSync('uploads')) {
+      fs.mkdirSync('uploads');
+    }
+    cd(null, 'uploads');
+  },
+  filename: (_, file, cd) => {
+    cd(null, file.originalname);
+  },
+});
+const upload = multer({ storage });
+
+app.use(express.json());
+app.use(cors());
+app.use('/uploads', express.static('uploads'));
+
+app.post('/auth/login', login);
+app.post('/auth/register', validatorRegister, register);
+
+app.post('/upload', checkAuth, upload.single('image'), (req, res) => {
+  res.json({ url: `/uploads/${req.file.originalname}` });
+});
+
+app.post('/subscribes', checkAuth, SubscribeToMe);
+app.get('/subscribes/me', checkAuth, SubscribeMe);
+app.get('/posts/subscribes', checkAuth, PostsSubscribe);
+
+app.get('/posts/likes', checkAuth, PostsLike);
+
+app.post('/posts', checkAuth, acticleValidation, PostsCreate);
+app.get('/posts', PostsArticles);
+
+app.get('/posts/:id', PostsArticle);
+app.delete('/posts/:id', checkAuth, PostsDelete);
+app.patch('/posts/:id', checkAuth, acticleValidation, PostsUpdate);
+app.get('/:user/posts', PostsUser);
+
+app.post('/likes/:postId', checkAuth, toggleLikeDislikePost);
+
+app.post('/subscribes/:userId', checkAuth, toggleSubscribe);
+
+app.post('/likes/comment/:commentId', checkAuth, validatorComment, toggleLikeDislikeComment);
+app.post('/comment/:postId', checkAuth, validatorComment, commentArticle);
+
+app.delete('/comment/:postId/:commentId', checkAuth, commentArticleDelete);
+app.patch('/comment/:postId/:commentId', checkAuth, validatorComment, commentArticlePatch);
+app.get('/comment/:postId/:commentId', commentArticleGetOne);
+app.get('/comment/:postId', commentArticleGetAll);
+
+app.listen(5555, (err) => {
+  err ? console.log(err) : console.log('OK');
+});
