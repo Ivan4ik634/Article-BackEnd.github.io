@@ -63,6 +63,9 @@ app.use(express.json());
 app.use(cors());
 app.use('/uploads', express.static('tmp/uploads'));
 
+app.get('/', (req, res) => {
+  res.send('Server is working!');
+});
 app.post('/auth/login', login);
 app.post('/auth/register', validatorRegister, register);
 
