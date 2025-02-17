@@ -42,10 +42,11 @@ mongoose
   .catch(() => console.log('error'));
 const app = express();
 
-const uploadDir = 'tmp/uploads';
+const uploadDir = path.join(process.cwd(), 'tmp/uploads');
 
 if (!fs.existsSync(uploadDir)) {
   fs.mkdirSync(uploadDir, { recursive: true });
+  console.log('Upload directory created:', uploadDir);
 }
 
 const storage = multer.diskStorage({
