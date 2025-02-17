@@ -3,6 +3,7 @@ import cors from 'cors';
 import mongoose from 'mongoose';
 import multer from 'multer';
 import fs from 'fs';
+import path from 'path';
 import { login, register } from './controllers/User.js';
 import checkAuth from './utils/checkAuth.js';
 import {
@@ -40,28 +41,37 @@ mongoose
   })
   .catch(() => console.log('error'));
 const app = express();
+
+const uploadDir = 'tmp/uploads';
+
+if (!fs.existsSync(uploadDir)) {
+  fs.mkdirSync(uploadDir, { recursive: true });
+}
+
 const storage = multer.diskStorage({
-  destination: (_, __, cd) => {
-    if (!fs.existsSync('uploads')) {
-      fs.mkdirSync('uploads');
-    }
-    cd(null, 'uploads');
+  destination: (req, file, cb) => {
+    cb(null, uploadDir);
   },
-  filename: (_, file, cd) => {
-    cd(null, file.originalname);
+  filename: (req, file, cb) => {
+    cb(null, `${file.originalname}`);
   },
 });
 const upload = multer({ storage });
 
 app.use(express.json());
 app.use(cors());
-app.use('/uploads', express.static('uploads'));
+app.use('/uploads', express.static('tmp/uploads'));
 
 app.post('/auth/login', login);
 app.post('/auth/register', validatorRegister, register);
 
 app.post('/upload', checkAuth, upload.single('image'), (req, res) => {
-  res.json({ url: `/uploads/${req.file.originalname}` });
+  const filePath = path.join('tmp/uploads', req.file.filename);
+
+  // Проверяем, существует ли файл
+  if (!fs.existsSync(filePath)) {
+    return res.status(500).json({ error: 'File was not saved on the server' });
+  }
 });
 
 app.post('/subscribes', checkAuth, SubscribeToMe);
