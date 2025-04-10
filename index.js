@@ -111,36 +111,75 @@ app.use((err, req, res, next) => {
   });
 });
 
-const server = http.createServer(app);
-const io = new Server(server, { cors: { origin: '*' } });
+app.get('/chats', async (req, res) => {
+  const chats = await Chat.find({
+    participants: { $in: [req.userId] },
+  }).populate('messages'); // Получаем сообщения чатов
+  res.json(chats);
+});
 
+// Эндпоинт для получения сообщений конкретного чата
 app.get('/messages/:roomId', async (req, res) => {
-  const messages = await Message.find({ roomId: req.params.roomId });
-  res.json(messages);
+  const chat = await Chat.findById(req.params.roomId);
+  res.json(chat.messages);
 });
 
 io.on('connection', (socket) => {
-  console.log('User connected', socket.id);
+  console.log('Пользователь подключен', socket.id);
 
-  socket.on('joinRoom', ({ roomId }) => {
-    socket.join(roomId);
+  socket.on('joinRoom', async ({ senderId, receiverId }) => {
+    // Создаем уникальный roomId для чата между пользователями
+    let chat = await Chat.findOne({
+      participants: { $all: [senderId, receiverId] },
+    });
+
+    if (!chat) {
+      // Если чат не существует, создаем новый
+      chat = new Chat({
+        participants: [senderId, receiverId],
+        messages: [],
+      });
+      await chat.save();
+    }
+
+    // Подключаемся к комнате по ID чата
+    socket.join(chat._id.toString());
   });
 
-  socket.on('sendMessage', async ({ roomId, senderId, receiverId, text }) => {
-    const message = new Message({ roomId, senderId, receiverId, text });
-    await message.save();
-    io.to(roomId).emit('newMessage', message);
+  socket.on('sendMessage', async ({ senderId, receiverId, text }) => {
+    let chat = await Chat.findOne({
+      participants: { $all: [senderId, receiverId] },
+    });
+
+    if (!chat) {
+      chat = new Chat({
+        participants: [senderId, receiverId],
+        messages: [],
+      });
+      await chat.save();
+    }
+
+    // Создаем сообщение и сохраняем его в чат
+    const message = { senderId, receiverId, text };
+    chat.messages.push(message);
+    await chat.save();
+
+    // Отправляем новое сообщение в комнату чата
+    io.to(chat._id.toString()).emit('newMessage', message);
   });
 
   socket.on('deleteMessage', async ({ roomId, messageId }) => {
-    const message = await Message.findByIdAndDelete(messageId);
-    if (message) {
+    const chat = await Chat.findById(roomId);
+    if (chat) {
+      // Удаляем сообщение по его ID
+      chat.messages.id(messageId).remove();
+      await chat.save();
       io.to(roomId).emit('messageDeleted', { messageId });
     }
   });
 
   socket.on('disconnect', () => {
-    console.log('User disconnected', socket.id);
+    console.log('Пользователь отключен', socket.id);
   });
 });
 
