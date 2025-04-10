@@ -96,6 +96,7 @@ const storage = new CloudinaryStorage({
     public_id: (req, file) => file.originalname, // Оставляет оригинальное имя файла
   },
 });
+const port = process.env.PORT || 5555;
 
 const upload = multer({ storage });
 app.use(express.json());
@@ -117,6 +118,7 @@ app.get('/messages/:roomId', async (req, res) => {
   const messages = await Message.find({ roomId: req.params.roomId });
   res.json(messages);
 });
+
 io.on('connection', (socket) => {
   console.log('User connected', socket.id);
 
@@ -141,7 +143,8 @@ io.on('connection', (socket) => {
     console.log('User disconnected', socket.id);
   });
 });
-server.listen(4000, () => console.log('Server running on port 4000'));
+
+server.listen(port, () => console.log('Server running on port 4000'));
 // Тестовый маршрут
 app.get('/', (req, res) => {
   res.send('Server is working!');
@@ -226,7 +229,6 @@ app.get('/history', checkAuth, UserHistoryAll);
 app.delete('/history/:id', checkAuth, UserHistoryDelete);
 app.delete('/history', checkAuth, UserHistoryDeleteAll);
 
-const port = 5555;
 app.listen(port, () => {
   console.log(`Server is running on port ${port}`);
 });
