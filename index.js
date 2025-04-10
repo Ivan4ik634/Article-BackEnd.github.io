@@ -111,6 +111,13 @@ app.use((err, req, res, next) => {
   });
 });
 
+const io = new Server(server, {
+  cors: {
+    origin: '*',
+    methods: ['GET', 'POST'],
+  },
+});
+
 app.get('/chats', async (req, res) => {
   const chats = await Chat.find({
     participants: { $in: [req.userId] },
