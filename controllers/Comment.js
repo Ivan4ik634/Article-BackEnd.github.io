@@ -1,33 +1,74 @@
 import PostsSchema from '../models/PostsCreate.js';
 import CommentSchema from '../models/Comment.js';
+import Post from '../models/PostsCreate.js';
+import NotificationSchema from '../models/Notification.js';
+import UserSchema from '../models/User.js';
+import User from '../models/User.js';
 import { validationResult } from 'express-validator';
+import Comment from '../models/Comment.js';
+
 export const commentArticle = async (req, res) => {
   try {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
-      return res.status(400).json(errors);
+      return res.status(400).json({ errors: errors.array() });
     }
 
     const postId = req.params.postId;
-    const post = await PostsSchema.findById(postId).populate('comments.comment');
+    const post = await Post.findById(postId).populate('comments.comment');
+    if (!post) {
+      return res.status(404).json({ message: 'Пост не знайдено' });
+    }
+
     const user = req.userId;
+    const userfull = await User.findById(user);
+    if (!userfull) {
+      return res.status(404).json({ message: 'Користувач не знайдений' });
+    }
+
     const doc = new CommentSchema({
       user,
       article: postId,
       text: req.body.text,
     });
-    await doc.save();
+
     post.comments.push({ comment: doc._id });
-    await post.save();
+
+    // Запускаем сохранение одновременно, чтобы ускорить
+    await Promise.all([doc.save(), post.save()]);
+
+    // Создаем уведомление, но не ждем его завершения
+    if (req.userId !== post.user._id.toString()) {
+      const docNotification = new NotificationSchema({
+        user: post.user,
+        notification: `Створився комент на ${post.title} цьому посту`,
+        TextNotification: `Від користувача ${userfull.fullName} з написом ${doc.text} `,
+        article: postId,
+        userReq: userfull._id,
+        views: false,
+      });
+      docNotification.save().catch((err) => console.error('Ошибка сохранения уведомления:', err));
+    }
+
     res.json({ message: 'Ви добавили коментарій!', doc });
   } catch (err) {
+    console.error(err);
     res.status(500).json({ message: 'Помилка сервера!' });
-    console.log(err);
   }
 };
 export const commentArticleGetAll = async (req, res) => {
   try {
-    const post = await PostsSchema.findById({ _id: req.params.postId });
+    const post = await Post.findById({ _id: req.params.postId })
+      .populate('user')
+      .populate('comments.comment')
+      .populate({
+        path: 'comments.comment', // путь к массиву комментариев
+        populate: {
+          path: 'user', // внутри комментариев заполняем поле user
+          select: 'fullName email', // выбираем только нужные поля пользователя
+        },
+      }); // здесь мы заполняем данные пользователя в комментариях
+
     if (!post) {
       res.status(400).json({ message: 'Такої статьі немає!' });
     }
@@ -36,9 +77,42 @@ export const commentArticleGetAll = async (req, res) => {
     res.status(500).json({ message: 'Помилка сервера!' });
   }
 };
+export const commentArticleGetAllSorted = async (req, res) => {
+  try {
+    const post = await Post.findById({ _id: req.params.postId })
+      .populate('user')
+      .populate('comments.comment')
+      .populate({
+        path: 'comments.comment',
+        populate: {
+          path: 'user',
+          select: 'fullName email',
+        },
+      });
+    if (!post) {
+      res.status(400).json({ message: 'Такої статьі немає!' });
+    }
+
+    if (req.body.action === 'SortLikes') {
+      const sortedPosts = post.comments.sort(
+        (a, b) => b.comment.likes.length - a.comment.likes.length,
+      );
+
+      res.json(sortedPosts);
+    }
+    if (req.body.action === 'SortData') {
+      const sortedPosts = post.comments.sort(
+        (a, b) => new Date(b.comment.createdAt) - new Date(a.comment.createdAt),
+      );
+      res.json(sortedPosts);
+    }
+  } catch (err) {
+    res.status(500).json({ message: `Помилка сервера! ${err}` });
+  }
+};
 export const commentArticleGetOne = async (req, res) => {
   try {
-    const comment = await CommentSchema.findById({ _id: req.params.commentId });
+    const comment = await Comment.findById({ _id: req.params.commentId }).populate('user');
     if (!comment) {
       res.status(400).json({ message: 'Такого коментаря немає!' });
     }
@@ -53,10 +127,10 @@ export const commentArticlePatch = async (req, res) => {
     if (!errors.isEmpty()) {
       return res.status(400).json(errors);
     }
-    const comment = await CommentSchema.findById({ _id: req.params.commentId });
+    const comment = await Comment.findById({ _id: req.params.commentId }).populate('user');
     const post = await PostsSchema.findById({ _id: req.params.postId });
     const user = req.userId;
-    if (comment.user.toString() !== user) {
+    if (comment.user._id.toString() !== user) {
       return res.status(403).json({ message: 'Ви не власник коментаря!' });
     }
     if (!comment) {
@@ -66,9 +140,8 @@ export const commentArticlePatch = async (req, res) => {
       res.status(400).json({ message: 'Такої статьі немає!' });
     }
     await CommentSchema.updateOne({ _id: req.params.commentId }, { text: req.body.text });
-    post.comments.push({ comment: req.params.postId });
-    await post.save();
-    res.json({ message: 'Коментарь обновлен!' });
+    await comment.save();
+    res.json({ message: 'Коментарь обновлен!', doc: comment });
   } catch (err) {
     res.status(500).json({ message: 'Помилка сервера!' });
     console.log(err);
@@ -107,6 +180,7 @@ export const toggleLikeDislikeComment = async (req, res) => {
     const { action } = req.body; // action = 'like' или 'dislike'
 
     const comment = await CommentSchema.findById(commentId);
+    const userReq = await UserSchema.findById(req.userId);
     if (!comment) {
       return res.status(404).json({ message: 'Статья не найдена' });
     }
@@ -132,7 +206,21 @@ export const toggleLikeDislikeComment = async (req, res) => {
 
       // Добавляем лайк
       comment.likes.push({ user: req.userId });
+
       await comment.save();
+
+      if (comment.user._id !== userReq._id) {
+        const docNotification = new NotificationSchema({
+          user: comment.user,
+          notification: `Добавився лайк на ${comment.text} цьому коммент`,
+          TextNotification: `Від користувача ${userReq.fullName} `,
+
+          userReq: userReq._id,
+          views: false,
+        });
+        docNotification.save().catch((err) => console.error('Ошибка сохранения уведомления:', err));
+      }
+
       return res.json({ message: 'Лайк добавлен', comment });
     }
 
@@ -159,4 +247,32 @@ export const toggleLikeDislikeComment = async (req, res) => {
   } catch (error) {
     res.status(500).json({ message: 'Ошибка сервера', error: error.message });
   }
+};
+export const securedComment = async (req, res) => {
+  const userId = req.userId;
+  const commentId = req.params.id;
+
+  if (!commentId) {
+    return res.status(400).json({ message: 'Невірний айді у поста!' });
+  }
+
+  const comment = await Comment.findById(commentId).populate('article');
+
+  if (!userId) {
+    return res.status(400).json({ message: 'У вас немає акаунту!' });
+  }
+  console.log(comment);
+  if (comment.article.user.toString() !== userId) {
+    return res.status(400).json({ message: 'У вас немає прав ' });
+  }
+
+  // Перевірка, чи пост вже скритий, та переключення состояния
+  const isSecured = comment.secured;
+  comment.secured = !isSecured;
+
+  await comment.save();
+
+  res.json({
+    message: isSecured ? 'Пост більше не скритий!' : 'Ви зробили пост скритим!',
+  });
 };

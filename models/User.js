@@ -9,13 +9,35 @@ const UserSchema = new mongoose.Schema({
     required: true,
     unique: true,
   },
+  biograffy: {
+    type: String,
+    require: false,
+  },
+  avatar: {
+    type: String,
+    require: false,
+  },
+  badge: {
+    type: String,
+    require: false,
+  },
+  online: {
+    type: Boolean,
+    default: false,
+  },
+
   passwordHash: {
     type: String,
     required: true,
   },
   subscribes: [
     {
-      user: { type: mongoose.Schema.Types.ObjectId, require: true },
+      user: { type: mongoose.Schema.Types.ObjectId, ref: 'User', require: true },
+    },
+  ],
+  blockedUsers: [
+    {
+      user: { type: mongoose.Schema.Types.ObjectId, ref: 'User', require: true },
     },
   ],
 });
