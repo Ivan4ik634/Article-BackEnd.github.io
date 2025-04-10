@@ -144,7 +144,7 @@ io.on('connection', (socket) => {
   });
 });
 
-server.listen(port, () => console.log('Server running on port 4000'));
+server.listen(4000, () => console.log('Server running on port 4000'));
 // Тестовый маршрут
 app.get('/', (req, res) => {
   res.send('Server is working!');
