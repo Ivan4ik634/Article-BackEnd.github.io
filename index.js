@@ -66,6 +66,7 @@ import { CloudinaryStorage } from 'multer-storage-cloudinary';
 import 'dotenv/config';
 import Notification from './models/Notification.js';
 import { Message } from './models/Message.js';
+import { Chat } from './models/Chat.js';
 
 mongoose
   .connect(
