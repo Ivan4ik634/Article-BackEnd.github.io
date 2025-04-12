@@ -125,6 +125,19 @@ app.get('/chats', async (req, res) => {
   res.json(chats);
 });
 
+app.post('/chats', async (req, res) => {
+  const { participants, name } = req.body;
+
+  const newChat = new Chat({
+    participants,
+    name,
+    messages: [],
+  });
+
+  await newChat.save();
+  res.json(newChat);
+});
+
 // Эндпоинт для получения сообщений конкретного чата
 app.get('/messages/:roomId', async (req, res) => {
   const chat = await Chat.findById(req.params.roomId);
