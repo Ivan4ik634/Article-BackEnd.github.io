@@ -119,7 +119,7 @@ const io = new Server(server, {
   },
 });
 
-app.get('/chats', async (req, res) => {
+app.get('/chats',checkAuth, async (req, res) => {
   const chats = await Chat.find({
     participants: { $in: [req.userId] },
   }).populate('messages'); // Получаем сообщения чатов
