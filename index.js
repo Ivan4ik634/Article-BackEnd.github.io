@@ -126,16 +126,21 @@ app.get('/chats', async (req, res) => {
 });
 
 app.post('/chats', async (req, res) => {
-  const { participants, name } = req.body;
+  try {
+    const { participants, name } = req.body;
+    console.log(name, participants);
+    const newChat = new Chat({
+      participants,
+      name,
+      messages: [],
+    });
+    console.log(newChat);
 
-  const newChat = new Chat({
-    participants,
-    name,
-    messages: [],
-  });
-
-  await newChat.save();
-  res.json(newChat);
+    await newChat.save();
+    res.json(newChat);
+  } catch (error) {
+    console.log(error);
+  }
 });
 
 // Эндпоинт для получения сообщений конкретного чата
