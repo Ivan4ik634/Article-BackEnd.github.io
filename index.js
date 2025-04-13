@@ -176,12 +176,12 @@ io.on('connection', (socket) => {
 
   socket.on('sendMessage', async ({ senderId, receiverId, text }) => {
     let chat = await Chat.findOne({
-      participants: { $all: [senderId, receiverId] },
+      participants: { $all: [receiverId, senderId] },
     });
-
+    console.log(chat);
     if (!chat) {
       chat = new Chat({
-        participants: [senderId, receiverId],
+        participants: [receiverId, senderId],
         messages: [],
       });
       await chat.save();
