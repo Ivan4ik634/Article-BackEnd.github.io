@@ -120,11 +120,9 @@ const io = new Server(server, {
 });
 
 app.get('/chats', checkAuth, async (req, res) => {
-  console.log(req.userId);
   const chats = await Chat.find({
     participants: { $in: [req.userId] },
   });
-  console.log(chats);
   res.json(chats);
 });
 
@@ -176,12 +174,12 @@ io.on('connection', (socket) => {
 
   socket.on('sendMessage', async ({ senderId, receiverId, text }) => {
     let chat = await Chat.findOne({
-      participants: { $all: [receiverId, senderId] },
+      participants: { $all: [senderId, receiverId] },
     });
-    console.log(chat);
+
     if (!chat) {
       chat = new Chat({
-        participants: [receiverId, senderId],
+        participants: [senderId, receiverId],
         messages: [],
       });
       await chat.save();
