@@ -186,7 +186,7 @@ io.on('connection', (socket) => {
     }
 
     // Создаем сообщение и сохраняем его в чат
-    const message = { senderId, receiverId, text };
+    const message = { senderId, receiverId, from: senderId, text };
     chat.messages.push(message);
     await chat.save();
 
