@@ -123,7 +123,7 @@ const io = new Server(server, {
 app.get('/chats', checkAuth, async (req, res) => {
   const chats = await Chat.find({
     participants: { $in: [req.userId] },
-  });
+  }).populate('participants');
   res.json(chats);
 });
 
