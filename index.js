@@ -134,9 +134,10 @@ app.post('/chats', async (req, res) => {
       name,
       messages: [],
     });
-
+    console.log(newChat, participants, name);
     await newChat.save();
     const populatedChat = await Chat.findById(newChat._id).populate('participants'); // Потом популятим
+    console.log(populatedChat);
     // const docNotification = await NotificationSchema.create({
     //   user: participants[1],
     //   notification: `Добавився чат!`,
