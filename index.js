@@ -129,16 +129,23 @@ app.get('/chats', checkAuth, async (req, res) => {
 app.post('/chats', async (req, res) => {
   try {
     const { participants, name } = req.body;
-    console.log(name, participants);
     const newChat = new Chat({
       participants,
       name,
       messages: [],
     });
-    console.log(newChat);
 
     await newChat.save();
-    res.json(newChat);
+    const populatedChat = await Chat.findById(newChat._id).populate('participants'); // Потом популятим
+    // const docNotification = await NotificationSchema.create({
+    //   user: participants[1],
+    //   notification: `Добавився чат!`,
+    //   TextNotification: `Назва чата ${name}`,
+    //   userReq: req.userId,
+    //   views: false,
+    // });
+    // await docNotification.save();
+    res.json(populatedChat);
   } catch (error) {
     console.log(error);
   }
@@ -150,9 +157,14 @@ app.get('/messages/:roomId', async (req, res) => {
   res.json(chat.messages);
 });
 
-io.on('connection', (socket) => {
-  console.log('Пользователь подключен', socket.id);
+io.on('connection', async (socket) => {
+  const userId = socket.handshake.query.userId;
 
+  if (!userId) return;
+  await User.findByIdAndUpdate(userId, { online: true });
+
+  // Уведомляем других
+  socket.broadcast.emit('user-online', { userId });
   socket.on('joinRoom', async ({ senderId, receiverId }) => {
     // Создаем уникальный roomId для чата между пользователями
     let chat = await Chat.findOne({
@@ -189,7 +201,6 @@ io.on('connection', (socket) => {
     const message = { senderId, receiverId, from: senderId, text };
     chat.messages.push(message);
     await chat.save();
-
     // Отправляем новое сообщение в комнату чата
     io.to(chat._id.toString()).emit('newMessage', message);
   });
@@ -204,8 +215,11 @@ io.on('connection', (socket) => {
     }
   });
 
-  socket.on('disconnect', () => {
-    console.log('Пользователь отключен', socket.id);
+  // 🧯 Когда отключается
+  socket.on('disconnect', async () => {
+    await User.findByIdAndUpdate(userId, { online: false });
+
+    socket.broadcast.emit('user-offline', { userId });
   });
 });
 

@@ -1,6 +1,7 @@
 import mongoose from 'mongoose';
 const chatSchema = new mongoose.Schema({
-  participants: [String], // ID отправителя и получателя
+  participants: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true }], // ID отправителя и получателя
+
   name: String,
   messages: [
     {
