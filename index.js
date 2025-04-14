@@ -67,6 +67,7 @@ import 'dotenv/config';
 import Notification from './models/Notification.js';
 import { Message } from './models/Message.js';
 import { Chat } from './models/Chat.js';
+import User from './models/User.js';
 
 mongoose
   .connect(
