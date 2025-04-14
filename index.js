@@ -159,7 +159,7 @@ app.get('/messages/:roomId', async (req, res) => {
 
 io.on('connection', async (socket) => {
   const userId = socket.handshake.query.userId;
-
+  console.log(userId, socket.id);
   if (!userId) return;
   await User.findByIdAndUpdate(userId, { online: true });
 
