@@ -68,6 +68,7 @@ import Notification from './models/Notification.js';
 import { Message } from './models/Message.js';
 import { Chat } from './models/Chat.js';
 import User from './models/User.js';
+import { timeStamp } from 'console';
 
 mongoose
   .connect(
@@ -124,9 +125,10 @@ app.get('/chats', checkAuth, async (req, res) => {
   const chats = await Chat.find({
     participants: { $in: [req.userId] },
   }).populate('participants');
+
   res.json(chats);
 });
-
+//create Chats
 app.post('/chats', async (req, res) => {
   try {
     const { participants, name } = req.body;
@@ -152,29 +154,63 @@ app.post('/chats', async (req, res) => {
     console.log(error);
   }
 });
-
-// Эндпоинт для получения сообщений конкретного чата
-app.get('/messages/:roomId', async (req, res) => {
-  const chat = await Chat.findById(req.params.roomId);
-  res.json(chat.messages);
+//Chat Delete
+app.delete('/chats/:id', async (req, res) => {
+  try {
+    const chatId = req.params.id;
+    const chat = await Chat.findById(chatId);
+    if (!chat) return;
+    await Chat.deleteOne({ _id: chatId });
+    res.json({ message: 'delete chat true' });
+  } catch (err) {
+    console.log(err);
+  }
 });
+//pin Chat
+app.post('/chats/:id', async (req, res) => {
+  try {
+    const chatId = req.params.id;
+    const chat = await Chat.findById(chatId);
+
+    if (!chat) return;
+    chat.pin = !chat.pin;
+    await chat.save();
+    res.json({ message: 'pin chat true' });
+  } catch (err) {
+    console.log(err);
+  }
+});
+// Эндпоинт для получения сообщений конкретного чата
 
 io.on('connection', async (socket) => {
   const userId = socket.handshake.query.userId;
-  console.log(userId, socket.id);
   if (!userId) return;
+
+  // Обновляем статус пользователя
   await User.findByIdAndUpdate(userId, { online: true });
 
-  // Уведомляем других
-  socket.broadcast.emit('user-online', { userId });
+  const chats = await Chat.find({ participants: userId }).populate({
+    path: 'participants',
+  });
+
+  const filteredChats = chats.filter((chat) =>
+    chat.participants.some((p) => p._id.toString() !== userId),
+  );
+
+  // 3. Отправим клиенту список чатов с онлайн-юзерами
+  socket.to(userId).emit('online:users', { users: filteredChats });
+  // Присоединяемся к глобальной комнате (например, на странице "Чаты")
+  socket.on('joinGlobalRoom', () => {
+    socket.join('global-room');
+  });
+
+  // Присоединяемся к конкретной комнате по chatId
   socket.on('joinRoom', async ({ senderId, receiverId }) => {
-    // Создаем уникальный roomId для чата между пользователями
     let chat = await Chat.findOne({
       participants: { $all: [senderId, receiverId] },
     });
 
     if (!chat) {
-      // Если чат не существует, создаем новый
       chat = new Chat({
         participants: [senderId, receiverId],
         messages: [],
@@ -182,10 +218,36 @@ io.on('connection', async (socket) => {
       await chat.save();
     }
 
-    // Подключаемся к комнате по ID чата
     socket.join(chat._id.toString());
   });
+  // Отмечаем сообщения как прочитанные
+  socket.on('readMessages', async ({ chatId, userId }) => {
+    try {
+      const chat = await Chat.findById(chatId);
+      if (!chat) return;
 
+      let updated = false;
+
+      chat.messages.forEach((msg) => {
+        if (!msg.isRead && msg.senderId !== userId) {
+          msg.isRead = true;
+          updated = true;
+        }
+      });
+
+      if (updated) {
+        await chat.save();
+        io.to(chatId).emit('messagesRead', { chatId, userId });
+        io.to('global-room').emit('chatListUpdate', {
+          chatId: chat._id.toString(),
+          messages: chat.messages,
+        });
+      }
+    } catch (err) {
+      console.error('Error reading messages:', err);
+    }
+  });
+  // Отправка сообщения
   socket.on('sendMessage', async ({ senderId, receiverId, text }) => {
     let chat = await Chat.findOne({
       participants: { $all: [senderId, receiverId] },
@@ -199,29 +261,83 @@ io.on('connection', async (socket) => {
       await chat.save();
     }
 
-    // Создаем сообщение и сохраняем его в чат
-    const message = { senderId, receiverId, from: senderId, text };
+    const message = {
+      _id: new mongoose.Types.ObjectId(),
+      chatId: chat._id,
+      senderId,
+      receiverId,
+      from: senderId,
+      text,
+      timestamp: new Date(),
+      isRead: false,
+    };
+
     chat.messages.push(message);
     await chat.save();
-    // Отправляем новое сообщение в комнату чата
+    console.log(chat);
+    // Отправка в чат-комнату
     io.to(chat._id.toString()).emit('newMessage', message);
-  });
 
+    // Отправка в глобальную комнату для обновления списка чатов
+    io.to('global-room').emit('chatListUpdate', {
+      chatId: chat._id.toString(),
+      messages: chat.messages,
+    });
+  });
+  // Удаление одного сообщения
   socket.on('deleteMessage', async ({ roomId, messageId }) => {
-    const chat = await Chat.findById(roomId);
-    if (chat) {
-      // Удаляем сообщение по его ID
-      chat.messages.id(messageId).remove();
+    try {
+      const chat = await Chat.findById(roomId);
+      if (!chat) return;
+
+      const messageIndex = chat.messages.findIndex((msg) => msg._id.toString() === messageId);
+
+      if (messageIndex === -1) return;
+
+      chat.messages.splice(messageIndex, 1);
       await chat.save();
+
       io.to(roomId).emit('messageDeleted', { messageId });
+      io.to('global-room').emit('chatListUpdate', {
+        chatId: chat._id.toString(),
+        messages: chat.messages,
+      });
+    } catch (err) {
+      console.error('Ошибка при удалении сообщения:', err);
+    }
+  });
+  // Очистка истории чата
+  socket.on('clearHistory', async ({ chatId }) => {
+    try {
+      const chat = await Chat.findById(chatId);
+      if (chat) {
+        chat.messages = [];
+        await chat.save();
+
+        io.to(chatId).emit('historyClear', { chatId });
+        io.to('global-room').emit('chatListUpdate', {
+          chatId: chat._id.toString(),
+          messages: chat.messages,
+        });
+      }
+    } catch (error) {
+      console.error('Ошибка при очистке истории чата:', error);
     }
   });
 
-  // 🧯 Когда отключается
+  // Отключение пользователя
   socket.on('disconnect', async () => {
-    await User.findByIdAndUpdate(userId, { online: false });
+    if (userId) {
+      await User.findByIdAndUpdate(userId, {
+        online: false,
+        lastSeen: new Date(),
+      });
 
-    socket.broadcast.emit('user-offline', { userId });
+      const filteredChatsDisconect = chats.filter((chat) =>
+        chat.participants.some((p) => p._id.toString() !== userId),
+      );
+      io.to(userId).emit('online:users', { users: filteredChatsDisconect });
+    }
   });
 });
 

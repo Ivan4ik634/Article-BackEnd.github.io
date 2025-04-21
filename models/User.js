@@ -17,6 +17,7 @@ const UserSchema = new mongoose.Schema({
     type: String,
     require: false,
   },
+  lastSeen: Date,
   badge: {
     type: String,
     require: false,
