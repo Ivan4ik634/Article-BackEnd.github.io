@@ -155,17 +155,7 @@ app.post('/chats', async (req, res) => {
   }
 });
 //Chat Delete
-app.delete('/chats/:id', async (req, res) => {
-  try {
-    const chatId = req.params.id;
-    const chat = await Chat.findById(chatId);
-    if (!chat) return;
-    await Chat.deleteOne({ _id: chatId });
-    res.json({ message: 'delete chat true' });
-  } catch (err) {
-    console.log(err);
-  }
-});
+
 //pin Chat
 app.post('/chats/:id', async (req, res) => {
   try {
@@ -203,7 +193,20 @@ io.on('connection', async (socket) => {
   socket.on('joinGlobalRoom', () => {
     socket.join('global-room');
   });
+  socket.on('deleteChat', async ({ chatId }) => {
+    try {
+      const chat = await Chat.findById(chatId);
+      if (!chat) return;
+      await Chat.deleteOne({ _id: chatId });
+      const chats = await Chat.find();
 
+      io.to('global-room').emit('chatsUpdate', {
+        chats: chats,
+      });
+    } catch (err) {
+      console.log(err);
+    }
+  });
   // Присоединяемся к конкретной комнате по chatId
   socket.on('joinRoom', async ({ senderId, receiverId }) => {
     let chat = await Chat.findOne({
