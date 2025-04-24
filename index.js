@@ -198,16 +198,11 @@ io.on('connection', async (socket) => {
     try {
       const chat = await Chat.findById(chatId);
       if (!chat) return;
-      const chatsUser_1 = await Chat.find({ participants: chat.participants[0]._id });
-      const chatsUser_2 = await Chat.find({ participants: chat.participants[1]._id });
+      const chats = await Chat.find({ participants: userId });
       await Chat.deleteOne({ _id: chatId });
 
-      io.to(chat.participants[0]._id).emit('chatsUpdate', {
-        chats: chatsUser_1,
-      });
-
-      io.to(chat.participants[1]._id).emit('chatsUpdate', {
-        chats: chatsUser_2,
+      io.to('global-room').emit('chatsUpdate', {
+        chats: chats,
       });
     } catch (err) {
       console.log(err);
