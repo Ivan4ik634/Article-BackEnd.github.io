@@ -198,12 +198,16 @@ io.on('connection', async (socket) => {
     try {
       const chat = await Chat.findById(chatId);
       if (!chat) return;
-      await Chat.deleteOne({ _id: chatId });
-      const chats = await Chat.find();
 
-      io.to('global-room').emit('chatsUpdate', {
-        chats: chats,
-      });
+      const participants = chat.participants; // [user1Id, user2Id]
+
+      await Chat.deleteOne({ _id: chatId }); // сначала удаляем чат
+
+      // Для каждого участника отправляем его актуальные чаты
+      for (const userId of participants) {
+        const chats = await Chat.find({ participants: userId }); // только после удаления
+        io.to(userId.toString()).emit('chatsUpdate', { chats });
+      }
     } catch (err) {
       console.log(err);
     }
