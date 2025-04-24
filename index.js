@@ -198,16 +198,17 @@ io.on('connection', async (socket) => {
     try {
       const chat = await Chat.findById(chatId);
       if (!chat) return;
+      const chatsUser_1 = await Chat.find({ participants: chat.participants[0]._id });
+      const chatsUser_2 = await Chat.find({ participants: chat.participants[1]._id });
+      await Chat.deleteOne({ _id: chatId });
 
-      const participants = chat.participants; // [user1Id, user2Id]
+      io.to(chat.participants[0]._id).emit('chatsUpdate', {
+        chats: chatsUser_1,
+      });
 
-      await Chat.deleteOne({ _id: chatId }); // сначала удаляем чат
-
-      // Для каждого участника отправляем его актуальные чаты
-      for (const userId of participants) {
-        const chats = await Chat.find({ participants: userId }); // только после удаления
-        io.to(userId.toString()).emit('chatsUpdate', { chats });
-      }
+      io.to(chat.participants[1]._id).emit('chatsUpdate', {
+        chats: chatsUser_2,
+      });
     } catch (err) {
       console.log(err);
     }
